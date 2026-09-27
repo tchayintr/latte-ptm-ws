@@ -397,14 +397,10 @@ class BertPretrainer(pl.LightningModule):
         parser.add_argument('--lr', type=float, default=2e-5)
         parser.add_argument('--dropout', type=float, default=0.2)
         parser.add_argument('--pretrained-model',
-                            choices=[
-                                'data/ptm/bert-base-chinese',
-                                'data/ptm/bert-base-japanese-char-v2',
-                                'data/ptm/bert-base-multilingual-cased',
-                                'bert-base-chinese',
-                                'cl-tohoku/bert-base-japanese-char-v2',
-                                'bert-base-multilingual-cased',
-                            ])
+                            help=('local path or huggingface id, e.g., '
+                                  'data/ptm/bert-base-chinese, '
+                                  'cl-tohoku/bert-base-japanese-char-v2, '
+                                  'bert-base-multilingual-cased'))
         parser.add_argument('--bert-mode',
                             choices=['none', 'concat', 'sum', 'sum-all'],
                             default='none')

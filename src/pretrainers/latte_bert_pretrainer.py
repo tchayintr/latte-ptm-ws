@@ -187,8 +187,8 @@ class LatteBertPretrainer(BertPretrainer):
         return torch.squeeze(outputs)
 
     def _get_node_attrs_from_lattice(self, batch) -> torch.Tensor:
-        return pad_sequence(
-            [data.x.detach().clone() for data in batch.to_data_list()])
+        '''keep the graph: detaching here stops the gnn from training'''
+        return pad_sequence([data.x for data in batch.to_data_list()])
 
     def _get_mapping_table_and_mask(self, node_attrs, mapping, padding_idx=0):
         '''
@@ -259,7 +259,7 @@ class LatteBertPretrainer(BertPretrainer):
         char_node_ids = self._get_char_node_ids_from_lattice(batch_lattice)
         char_node_attrs = []
         for node_ids, data in zip(char_node_ids, batch_lattice.to_data_list()):
-            node_attrs = data.x.detach().clone()
+            node_attrs = data.x
             char_node_attrs.append(node_attrs[node_ids])
         return pad_sequence([attrs for attrs in char_node_attrs])
 
@@ -326,11 +326,23 @@ class LatteBertPretrainer(BertPretrainer):
         '''get char_node_ids for batch'''
         char_node_indices = self._get_char_node_indices(
             batch_lattice, batch, input_lengths)
-        _batch_lattice = batch_lattice.detach().clone()
-        for i, (node_ids, node_indices, data) in enumerate(
-                zip(char_node_ids, char_node_indices,
-                    _batch_lattice.to_data_list())):
-            data.x[node_ids] = batch[i][node_indices].detach().clone()
+        '''
+        replace out-of-place so that gradients flow to both the lattice
+        nodes and the contextualised chars (the previous in-place write into
+        detached copies stopped the gradients of the whole lattice path)
+        '''
+        rows, srcs = [], []
+        for i, (node_ids, node_indices) in enumerate(
+                zip(char_node_ids, char_node_indices)):
+            offset = int(batch_lattice.ptr[i])
+            rows.append(
+                torch.as_tensor(node_ids, device=batch_lattice.x.device) +
+                offset)
+            srcs.append(batch[i][node_indices])
+        _batch_lattice = batch_lattice.clone()
+        _batch_lattice.x = batch_lattice.x.index_copy(
+            0, torch.cat(rows),
+            torch.cat(srcs).to(batch_lattice.x.dtype))
         return _batch_lattice
 
     def _concat_outputs_with_wv(self, outputs: torch.Tensor,
@@ -341,9 +353,8 @@ class LatteBertPretrainer(BertPretrainer):
     def _concat_node_attrs_with_wv(
             self, batch_lattice: torch.Tensor) -> torch.Tensor:
         wv_mat = self._get_node_attrs_wv(batch_lattice)
-        _batch_lattice = batch_lattice.detach().clone()
-        node_attrs = _batch_lattice.x.detach().clone()
-        _batch_lattice.x = torch.cat([node_attrs, wv_mat], dim=1)
+        _batch_lattice = batch_lattice.clone()
+        _batch_lattice.x = torch.cat([batch_lattice.x, wv_mat], dim=1)
         return _batch_lattice
 
     def configure_optimizers(self):

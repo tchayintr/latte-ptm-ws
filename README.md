@@ -16,6 +16,13 @@ ______________________________________________________________________
 
 </div>
 
+### Correction (2026): gradient bug in the original release
+- In the code released with the paper (tag [`jnlp-2023`](https://github.com/tchayintr/latte-ptm-ws/tree/jnlp-2023)), the lattice path was detached from the computation graph (`.detach()` in `src/pretrainers/latte_bert_pretrainer.py`).
+    - During pre-training, the BiGAT lattice encoder and the lexicon-token (word) embeddings therefore received no gradients and stayed at their random initialisation.
+    - This affects the released models on Hugging Face: their added lexicon-token embeddings are untrained. These models contain only the BERT encoder (no BiGAT, attention, or CRF weights) and are meant to be fine-tuned with [latte-ws](https://github.com/tchayintr/latte-ws).
+- Fixed: gradients now flow through the whole lattice path. Verified on the bundled sample data with `tests/test_gradient_flow.py` (BiGAT parameters receiving gradients: 36/36, previously 0/36).
+- The scores below are as reported in the paper and were obtained with the original code. They have not been re-run with the fix, as we no longer have access to the original datasets.
+
 ### LATTE: Lattice ATTentive Encoding for Character-based Word Segmentation
 - https://github.com/tchayintr/latte-ws
 
@@ -28,6 +35,7 @@ ______________________________________________________________________
     - B: beginning, M: middle, E: end, and S: single
 
 ### Segmentation Performance (including char-bin-f1, word-f1, oov-recall)
+As reported in the paper, obtained with the original code (see Correction above).
 - CTB6 (zh): 
     - word-f1: 98.1
     - oov-recall: 90.6
